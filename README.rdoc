@@ -2,6 +2,12 @@
 
 An in-memory hash implementation of riak.
 
+== Usage
+
+```ruby
+riak = Riak::Client.new(:protocol => :pbc, :nodes => [...], :protobuffs_backend => :Memory)
+```
+
 == Note on Patches/Pull Requests
  
 * Fork the project.
