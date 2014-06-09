@@ -15,7 +15,7 @@ Gem::Specification.new do |s|
   s.test_files    = Dir["spec/**/*"]
   s.require_paths = ["lib"]
   
-  s.add_dependency "riak"
+  s.add_dependency "riak-client", ">= 1.0.0"
 
-  s.add_development_dependency "rspec"
+  s.add_development_dependency "rspec", ">= 1.0.0"
 end
