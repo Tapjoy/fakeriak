@@ -4,16 +4,28 @@ require 'riak/failed_request'
 module Riak
   class Client
     class MemoryProtobuffsBackend
-      def self.configured?
-        true
+      class << self
+        attr_reader :server_data
+
+        def configured?
+          true
+        end
       end
+
+      @server_data = {}
 
       attr_accessor :client
       attr_accessor :node
       def initialize(client, node)
         @client = client
         @node = node
-        @data = {}
+        @data = self.class.server_data[node.host] || begin
+          data = {}
+          client.nodes.each do |node|
+            self.class.server_data[node.host] = data
+          end
+          data
+        end
       end
 
       def ping
@@ -71,11 +83,11 @@ module Riak
       end
 
       def list_keys(bucket, options={}, &block)
-        raise NotImplementedError
+        data(bucket).keys
       end
 
       def list_buckets(options={}, &blk)
-        raise NotImplementedError
+        @data.keys
       end
 
       def mapred(mr, &block)
