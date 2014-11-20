@@ -14,8 +14,8 @@ Gem::Specification.new do |s|
   s.files         = `git ls-files`.split("\n")
   s.test_files    = Dir["spec/**/*"]
   s.require_paths = ["lib"]
-
-  s.add_dependency "riak-client", ">= 2.0.0"
+  
+  s.add_dependency "riak-client", ">= 1.0.0"
 
   s.add_development_dependency "rspec", ">= 1.0.0"
 end
