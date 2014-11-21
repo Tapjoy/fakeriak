@@ -1,5 +1,12 @@
 require 'riak'
-require 'riak/failed_request'
+
+begin
+  # Riak 2.x
+  require 'riak/errors/failed_request'
+rescue LoadError
+  # Riak 1.x
+  require 'riak/failed_request'
+end
 
 module Riak
   class Client
