@@ -1,8 +1,8 @@
-= rakeriak
+# rakeriak
 
 An in-memory hash implementation of Riak.
 
-== Usage
+## Usage
 
 On Riak 1.x:
 
@@ -16,7 +16,7 @@ On Riak 2.x:
 riak = Riak::Client.new(:nodes => [...], :protobuffs_backend => :Memory)
 ```
 
-== Feature parity
+## Feature parity
 
 The following Riak features are currently not supported:
 * Luwak (deprecated in Riak 1.x, removed in Riak 2.x)
