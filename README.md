@@ -25,3 +25,8 @@ The following Riak features are currently not supported:
 * Search queries
 
 Everything else is fully supported.
+
+## Tasks needed to open source:
+
+1. Add documentation to code
+2. Add specs
