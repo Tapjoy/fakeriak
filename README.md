@@ -1,4 +1,4 @@
-# rakeriak
+# fakeriak
 
 An in-memory hash implementation of Riak.
 
