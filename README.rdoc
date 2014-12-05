@@ -1,19 +1,27 @@
 = rakeriak
 
-An in-memory hash implementation of riak.
+An in-memory hash implementation of Riak.
 
 == Usage
 
+On Riak 1.x:
+
 ```ruby
-riak = Riak::Client.new(:protocol => :pbc, :nodes => [...], :protobuffs_backend => :Memory)
+riak = Riak::Client.new(:protocol => :pbc, :nodes => [...], :protobuffs_backend => :Memory, :http_backend => :Memory)
 ```
 
-== Note on Patches/Pull Requests
- 
-* Fork the project.
-* Make your feature addition or bug fix.
-* Add tests for it. This is important so I don't break it in a
-  future version unintentionally.
-* Commit, do not mess with rakefile, version, or history.
-  (if you want to have your own version, that is fine but bump version in a commit by itself I can ignore when I pull)
-* Send me a pull request. Bonus points for topic branches.
+On Riak 2.x:
+
+```ruby
+riak = Riak::Client.new(:nodes => [...], :protobuffs_backend => :Memory)
+```
+
+== Feature parity
+
+The following Riak features are currently not supported:
+* Luwak (deprecated in Riak 1.x, removed in Riak 2.x)
+* Link walking (deprecated in Riak 1.x, removed in Riak 2.x)
+* Map reduce
+* Search queries
+
+Everything else is fully supported.

@@ -1,1 +1,1 @@
-require 'riak/client/memory_protobuffs_backend'
+require 'riak/client/memory_backend'
