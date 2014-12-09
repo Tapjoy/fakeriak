@@ -15,6 +15,8 @@ Gem::Specification.new do |s|
   s.test_files    = Dir["spec/**/*"]
   s.require_paths = ["lib"]
   
+  s.add_dependency "execjs"
+  s.add_dependency "multi_json"
   s.add_dependency "riak-client", ">= 1.0.0"
 
   s.add_development_dependency "rspec", ">= 1.0.0"
