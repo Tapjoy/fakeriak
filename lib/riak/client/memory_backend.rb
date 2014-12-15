@@ -15,6 +15,7 @@ require 'execjs'
 
 module Riak
   class Client
+    # An in-memory hash implementation of Riak
     class MemoryBackend
       class << self
         # Data associated with each known server
@@ -311,7 +312,7 @@ module Riak
         list_keys(bucket).each do |key|
           object = fetch_object(bucket, key)
           object.indexes[index].each do |value|
-            # Determine of the object is indexed by one of the values in the query
+            # Determine if the object is indexed by one of the values in the query
             found_match =
               if query.is_a?(Range)
                 value = value.to_s if query.first.is_a?(String)
@@ -475,6 +476,8 @@ module Riak
       end
     end
 
+    # Alias to the names that Riak expects to be available when customizing the
+    # backend being used
     MemoryHttpBackend = MemoryBackend
     MemoryProtobuffsBackend = MemoryBackend
   end
