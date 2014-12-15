@@ -3,7 +3,7 @@
 An in-memory hash implementation of Riak.  This is designed to be used in specs
 to remove the external dependency of a running Riak server.
 
-## Feature parity
+## Features
 
 The following Riak features are currently not implemented:
 * Solr search queries
@@ -41,8 +41,8 @@ end
 
 Typically this gem is used within specs in order to avoid external dependencies
 when running the spec suite.  In order to ensure that the data is reset in each
-spec, you'll need to explicitly do so as part of a `before` or `after` callback
-in the spec helper.  For example:
+spec, you'll need to explicitly do so as part of a `before` or `after` hook in
+the spec helper.  For example:
 
 ```ruby
 RSpec.configure do |config|
@@ -56,6 +56,18 @@ RSpec.configure do |config|
 end
 ```
 
-## Server data
+## Notes
 
-One important note that is that data will be shared across 
+### Server data
+
+One important note that is that data will be shared across servers that are
+configured in the same client.  For example, support you configured your
+client like so:
+
+```ruby
+riak = Riak::Client.new(:nodes => ["10.0.0.1", "10.0.0.2"], :http_backend => :Memory)
+```
+
+This would force data to be consistent across both the `10.0.0.1` node and the
+`10.0.0.2` node.  As a result, creating a client with only one of those nodes
+would return the same results.
