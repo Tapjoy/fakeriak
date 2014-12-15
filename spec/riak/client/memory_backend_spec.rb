@@ -164,9 +164,7 @@ describe Riak::Client::MemoryBackend do
     it 'should be empty by default' do
       expect(bucket.keys).to eq([])
     end
-  end
-  
-  describe 'list_buckets' do
+
     it 'should include created keys' do
       object = bucket.get_or_new('realkey')
       object.raw_data = 'Hello world'
@@ -177,16 +175,65 @@ describe Riak::Client::MemoryBackend do
     end
   end
   
+  describe 'list_buckets' do
+    it 'should not include previous buckets by default' do
+      bucket = client.buckets.detect {|bucket| bucket.name == 'fakeriak'}
+      expect(bucket).to eq(nil)
+    end
+
+    it 'should not new buckets' do
+      object = bucket.get_or_new('realkey')
+      object.raw_data = 'Hello world'
+      object.content_type = 'text/html'
+      object.store
+
+      bucket = client.buckets.detect {|bucket| bucket.name == 'fakeriak'}
+      expect(bucket).not_to eq(nil)
+    end
+  end
+  
   describe 'mapred' do
-    # TODO
+    it 'should process' do
+      object = bucket.get_or_new('key1')
+      object.raw_data = 'Hello world'
+      object.content_type = 'text/html'
+      object.store
+
+      object = bucket.get_or_new('key2')
+      object.raw_data = 'Hello world 2'
+      object.content_type = 'text/html'
+      object.store
+
+      script = <<-eos
+        function(obj) {
+          return [obj.values[0].data];
+        }
+eos
+      mapred = Riak::MapReduce.new(client).add(bucket.name).map(script, :keep => true).run
+      expect(mapred).to eq(['Hello world', 'Hello world 2'])
+    end
   end
   
   describe 'get_index' do
-    # TODO
+    it 'should fail when index is nonexistent' do
+      expect { client.get_search_index('invalid') }.to raise_error(Riak::ProtobuffsErrorResponse)
+    end
+
+    it 'should return index when existent' do
+      client.create_search_index('index1')
+      search_index = client.get_search_index('index1')
+
+      expect(search_index).to be_instance_of(Riak::Client::BeefcakeProtobuffsBackend::RpbYokozunaIndex)
+    end
   end
   
   describe 'create_search_index' do
-    # TODO
+    it 'should set attributes on index' do
+      search_index = client.get_search_index('index1')
+      expect(search_index.name).to eq('index1')
+      expect(search_index.schema).to eq('_yz_default')
+      expect(search_index.n_val).to eq(3)
+    end
   end
   
   describe 'get_search_index' do

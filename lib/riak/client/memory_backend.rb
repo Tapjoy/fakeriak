@@ -1,5 +1,6 @@
 require 'riak'
 require 'riak/util/translation'
+require 'riak/client/beefcake/messages'
 begin
   # Riak 2.x
   require 'riak/errors/failed_request'
@@ -254,6 +255,7 @@ module Riak
       # the buckets will be pased to that block.
       def list_buckets(options = {})
         buckets = @data[:buckets].keys
+        buckets.select! {|bucket| list_keys(bucket).any?}
 
         if block_given?
           yield buckets unless buckets.empty?
@@ -308,6 +310,7 @@ module Riak
 
       # Gets a list of objects in the given bucket that are indexed by
       # one or more terms.
+      # TODO: support options[:max_results], options[:continuation]
       def get_index(bucket, index, query, options = {}, &block)
         result = IndexCollection.new
 
