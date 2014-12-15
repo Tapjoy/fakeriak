@@ -178,13 +178,15 @@ module Riak
 
       # Updates the data represented by the given object
       def store_object(robject, options = {})
+        raw_data = begin; robject.raw_data.dup; rescue TypeError; robject.raw_data; end
+
         data(robject.bucket)[:keys][robject.key] = {
-          :value => robject.raw_data.dup,
+          :value => raw_data,
           :content_type => robject.content_type.dup,
           :links => robject.links.dup,
           :indexes => robject.indexes.dup,
           :meta => robject.meta.dup,
-          :etag => Digest::MD5.hexdigest(robject.raw_data),
+          :etag => Digest::MD5.hexdigest(raw_data.to_s),
           :last_modified => Time.now.gmtime,
           :vclock => Base64.encode64(Time.now.to_f.to_s).chomp
         }
