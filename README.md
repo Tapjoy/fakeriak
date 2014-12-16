@@ -87,3 +87,16 @@ To run the specs against a live version of Riak instead of the fake implementati
 ```
 LIVE=true bundle exec appraisal riak-2.1 rspec
 ```
+
+## TODO
+
+* Are we properly implementing CRDTs?
+* Does not support erlang with map/reduce
+* Link to appraisals project
+* What versions of Ruby are this tested against?
+* What versions of Riak client are supported?
+* Give basho a heads up to fakeriak
+* What should you pass in as nodes in the test environment?
+* Give a full copy/paste in the Rspec.configure
+* Add an MIT license
+* Build a post for announcing the project
