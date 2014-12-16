@@ -2,13 +2,22 @@ require 'spec_helper'
 require 'riak/client/memory_backend'
 require 'riak/version'
 
+def build_client
+  if ENV['LIVE']
+    Riak::Client.new
+  elsif RIAK_CLIENT_VERSION < '2.0.0'
+    Riak::Client.new(:protobuffs_backend => :Memory, :http_backend => :Memory)
+  else
+    Riak::Client.new(:protobuffs_backend => :Memory)
+  end
+end
+
+RIAK_CLIENT_VERSION = Riak::VERSION
+RIAK_SERVER_VERSION = build_client.backend {|backend| backend.server_info[:server_version]}
+
 describe Riak::Client::MemoryBackend do
   let(:client) do
-    if ENV['LIVE']
-      Riak::Client.new
-    else
-      Riak::Client.new(:protobuffs_backend => :Memory)
-    end
+    build_client
   end
   let(:subject) do
     subject = nil
@@ -18,9 +27,36 @@ describe Riak::Client::MemoryBackend do
   let(:bucket) do
     client.bucket('fakeriak')
   end
+  let(:search_schema) do
+    <<-XML
+<?xml version=\"1.0\" encoding=\"UTF-8\" ?>
+<schema name=\"#{@index}\" version=\"1.5\">
+<fields>
+ <field name=\"_yz_id\" type=\"_yz_str\" indexed=\"true\" stored=\"true\" multiValued=\"false\" required=\"true\" />
+ <field name=\"_yz_ed\" type=\"_yz_str\" indexed=\"true\" stored=\"true\" multiValued=\"false\"/>
+ <field name=\"_yz_pn\" type=\"_yz_str\" indexed=\"true\" stored=\"true\" multiValued=\"false\"/>
+ <field name=\"_yz_fpn\" type=\"_yz_str\" indexed=\"true\" stored=\"true\" multiValued=\"false\"/>
+ <field name=\"_yz_vtag\" type=\"_yz_str\" indexed=\"true\" stored=\"true\" multiValued=\"false\"/>
+ <field name=\"_yz_rk\" type=\"_yz_str\" indexed=\"true\" stored=\"true\" multiValued=\"false\"/>
+ <field name=\"_yz_rb\" type=\"_yz_str\" indexed=\"true\" stored=\"true\" multiValued=\"false\"/>
+ <field name=\"_yz_rt\" type=\"_yz_str\" indexed=\"true\" stored=\"true\" multiValued=\"false\"/>
+ <field name=\"_yz_err\" type=\"_yz_str\" indexed=\"true\" stored=\"true\" multiValued=\"false\"/>
+</fields>
+<uniqueKey>_yz_id</uniqueKey>
+<types>
+  <fieldType name=\"_yz_str\" class=\"solr.StrField\" sortMissingLast=\"true\" />
+</types>
+</schema>
+XML
+  end
 
   before(:each) do
+    @old_verbose, $VERBOSE = $VERBOSE, nil
     bucket.keys.each {|key| bucket.delete(key)}
+  end
+
+  after(:each) do
+    $VERBOSE = @old_verbose
   end
 
   describe 'ping' do
@@ -49,14 +85,6 @@ describe Riak::Client::MemoryBackend do
 
     it 'should return the server version' do
       expect(subject.server_info[:node]).not_to be_nil
-    end
-  end
-  
-  if Riak::VERSION < '2.0.0'
-    describe 'stats' do
-      it 'should return stats' do
-        expect(subject.stats).not_to be_nil
-      end
     end
   end
   
@@ -176,9 +204,8 @@ describe Riak::Client::MemoryBackend do
   end
   
   describe 'list_buckets' do
-    it 'should not include previous buckets by default' do
-      bucket = client.buckets.detect {|bucket| bucket.name == 'fakeriak'}
-      expect(bucket).to eq(nil)
+    it 'should build a collection' do
+      expect(client.buckets).to be_instance_of(Array)
     end
 
     it 'should not new buckets' do
@@ -210,50 +237,8 @@ describe Riak::Client::MemoryBackend do
         }
 eos
       mapred = Riak::MapReduce.new(client).add(bucket.name).map(script, :keep => true).run
-      expect(mapred).to eq(['Hello world', 'Hello world 2'])
+      expect(mapred).to match_array(['Hello world', 'Hello world 2'])
     end
-  end
-  
-  describe 'get_index' do
-    it 'should fail when index is nonexistent' do
-      expect { client.get_search_index('invalid') }.to raise_error(Riak::ProtobuffsErrorResponse)
-    end
-
-    it 'should return index when existent' do
-      client.create_search_index('index1')
-      search_index = client.get_search_index('index1')
-
-      expect(search_index).to be_instance_of(Riak::Client::BeefcakeProtobuffsBackend::RpbYokozunaIndex)
-    end
-  end
-  
-  describe 'create_search_index' do
-    it 'should set attributes on index' do
-      search_index = client.get_search_index('index1')
-      expect(search_index.name).to eq('index1')
-      expect(search_index.schema).to eq('_yz_default')
-      expect(search_index.n_val).to eq(3)
-    end
-  end
-  
-  describe 'get_search_index' do
-    # TODO
-  end
-  
-  describe 'update_search_index' do
-    # TODO
-  end
-  
-  describe 'delete_search_index' do
-    # TODO
-  end
-  
-  describe 'create_search_schema' do
-    # TODO
-  end
-  
-  describe 'get_search_schema' do
-    # TODO
   end
   
   describe 'teardown' do
@@ -263,6 +248,82 @@ eos
     end
   end
   
+  if RIAK_CLIENT_VERSION < '2.0.0'
+    describe 'stats' do
+      it 'should return stats' do
+        expect(subject.stats).not_to be_nil
+      end
+    end
+
+    describe 'update_search_index' do
+      it 'should replace the schema' do
+        result = subject.update_search_index('index1', '_yz_custom')
+        expect(result).to eq(true)
+      end
+    end
+  end
+
+  if RIAK_CLIENT_VERSION >= '2.0.0' && RIAK_SERVER_VERSION >= '2.0'
+    describe 'get_index' do
+      it 'should fail when index is nonexistent' do
+        expect { client.get_search_index('invalid') }.to raise_error(Riak::ProtobuffsErrorResponse)
+      end
+
+      it 'should return index when existent' do
+        client.create_search_index('index1')
+        search_index = client.get_search_index('index1')
+
+        expect(search_index.name).to eq('index1')
+        expect(search_index.schema).to eq('_yz_default')
+        expect(search_index.n_val).to eq(3)
+      end
+    end
+    
+    describe 'create_search_index' do
+      it 'should succeed' do
+        result = client.create_search_index('index1')
+        expect(result).to eq(true)
+      end
+    end
+    
+    describe 'get_search_index' do
+      it 'should fail when index is nonexistent' do
+        expect { client.get_search_index('fake') }.to raise_error(Riak::ProtobuffsErrorResponse)
+      end
+
+      it 'should return index when existent' do
+        client.create_search_index('index1')
+        expect(client.get_search_index('index1')).to_not eq(nil)
+      end
+    end
+    
+    describe 'delete_search_index' do
+      it 'should remove the index' do
+        client.create_search_index('index1', '_yz_default')
+        client.delete_search_index('index1')
+        expect { client.get_search_index('index1') }.to raise_error(Riak::ProtobuffsErrorResponse)
+      end
+    end
+
+    describe 'get_search_schema' do
+      it 'should fail when schema is nonexistent' do
+        expect { client.get_search_schema('fake') }.to raise_error(Riak::ProtobuffsErrorResponse)
+      end
+
+      it 'should return schema when existent' do
+        client.create_search_schema('schema1', search_schema)
+        expect(client.get_search_schema('schema1')).to_not eq(nil)
+      end
+    end
+    
+    describe 'create_search_schema' do
+      it 'should succeed' do
+        result = client.create_search_schema('schema1', search_schema)
+        expect(result).to eq(true)
+      end
+    end
+  end
+
   unless ENV['LIVE']
     describe 'search' do
       it 'should raise an error' do

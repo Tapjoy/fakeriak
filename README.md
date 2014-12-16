@@ -71,3 +71,19 @@ riak = Riak::Client.new(:nodes => ["10.0.0.1", "10.0.0.2"], :http_backend => :Me
 This would force data to be consistent across both the `10.0.0.1` node and the
 `10.0.0.2` node.  As a result, creating a client with only one of those nodes
 would return the same results.
+
+## Testing
+
+To test, you should use `appraisal` like so:
+
+```
+bundle exec appraisal riak-1.4 rspec
+bundle exec appraisal riak-2.0 rspec
+bundle exec appraisal riak-2.1 rspec
+```
+
+To run the specs against a live version of Riak instead of the fake implementation:
+
+```
+LIVE=true bundle exec appraisal riak-2.1 rspec
+```

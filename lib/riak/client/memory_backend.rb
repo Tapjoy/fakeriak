@@ -276,6 +276,17 @@ module Riak
           list_keys(bucket).each do |key|
             inputs << [bucket, key]
           end
+        elsif mr.inputs.is_a?(Hash)
+          bucket = mr.inputs[:bucket]
+          if index = mr.inputs[:index]
+            if mr.inputs[:key]
+              inputs.concat(get_index(bucket, index, key))
+            else
+              inputs.concat(get_index(bucket, index, mr.inputs[:start]..mr.inputs[:end]))
+            end
+          else
+            raise NotImplementedError, 'Key filters are not implemented for map-reduce processes'
+          end
         else
           inputs.concat(mr.inputs)
         end
@@ -313,6 +324,8 @@ module Riak
       # TODO: support options[:max_results], options[:continuation]
       def get_index(bucket, index, query, options = {}, &block)
         result = IndexCollection.new
+        continuation = (options[:continuation] || 0).to_i
+        skipped = 0
 
         list_keys(bucket).each do |key|
           object = fetch_object(bucket, key)
@@ -328,12 +341,21 @@ module Riak
               end
 
             if found_match
-              # Track the match
-              result << key unless result.include?(key)
-              if options[:return_terms]
-                result.with_terms ||= {}
-                result.with_terms[value] ||= []
-                result.with_terms[value] << key
+              if skipped >= continuation
+                # Track the match
+                result << key unless result.include?(key)
+                if options[:return_terms]
+                  result.with_terms ||= {}
+                  result.with_terms[value] ||= []
+                  result.with_terms[value] << key
+                end
+
+                if options[:max_results] && result.length == options[:max_results]
+                  result.continuation = (result.length + 1).to_s
+                  break
+                end
+              else
+                skipped += 1
               end
             end
           end
@@ -360,7 +382,9 @@ module Riak
 
       # Updates the schema for the given Solr index
       def update_search_index(name, updates)
-        @data[:search_indexes][name][:schema] = updates
+        index = @data[:search_indexes][name] ||= {:name => name, :n_val => 3}
+        index[:schema] = updates
+        true
       end
 
       # Deletes the given Solr index from Riak
