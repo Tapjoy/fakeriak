@@ -52,7 +52,7 @@ XML
 
   before(:each) do
     @old_verbose, $VERBOSE = $VERBOSE, nil
-    [nil, 'realtype', 'other'].each do |bucket_type|
+    [nil, 'realtype', 'other', 'counters', 'sets', 'maps'].each do |bucket_type|
       subject.reset_bucket_props(bucket, :type => bucket_type)
       subject.reset_bucket_type_props(bucket_type)
 
@@ -529,6 +529,248 @@ eos
 
         expect(client.get_index(bucket, 'index_int', 20)).to eq([])
         expect(client.get_index(bucket, 'index_int', 20, :type => 'realtype')).to eq(['realkey'])
+      end
+    end
+
+    describe 'crdts' do
+      before(:each) do
+        subject.set_bucket_type_props('counters', :datatype => 'counter')
+        subject.set_bucket_type_props('sets', :datatype => 'set')
+        subject.set_bucket_type_props('maps', :datatype => 'map')
+      end
+
+      describe 'counter' do
+        let(:counter) do
+          Riak::Crdt::Counter.new(bucket, 'users')
+        end
+
+        it 'should be 0 by default' do
+          expect(counter.value).to eq(0)
+        end
+
+        it 'should increment' do
+          expect(counter.increment).to eq(true)
+        end
+
+        it 'should increment with custom value' do
+          expect(counter.increment(3)).to eq(true)
+        end
+
+        it 'should decrement' do
+          expect(counter.decrement).to eq(true)
+        end
+
+        it 'should track value' do
+          counter.increment
+          counter.increment(3)
+          counter.decrement(2)
+
+          expect(counter.value).to eq(2)
+        end
+
+        it 'should process batches' do
+          counter.batch do |c|
+            c.increment
+            c.increment(3)
+            c.decrement(2)
+          end
+
+          expect(counter.value).to eq(2)
+        end
+
+        it 'should store data scoped to the type' do
+          counter.increment
+          expect(client.get_object(bucket, 'users', :type => 'counters')).not_to be_nil
+        end
+
+        it 'should set the content type on the object' do
+          counter.increment
+          object = client.get_object(bucket, 'users', :type => 'counters')
+          expect(object.content_type).to eq('application/riak_counter')
+        end
+      end
+
+      describe 'set' do
+        let(:set) do
+          Riak::Crdt::Set.new(bucket, 'users')
+        end
+
+        it 'should be an empty set by default' do
+          expect(set.value).to eq(Set.new)
+        end
+
+        it 'should add values' do
+          expect(set.add('john')).to eq(true)
+        end
+
+        it 'should remove values' do
+          expect(set.add('smith')).to eq(true)
+        end
+
+        it 'should track changes' do
+          set.add('john')
+          set.add('smith')
+          set.remove('smith')
+
+          expect(set.value).to eq(Set.new(['john']))
+        end
+
+        it 'should process batches' do
+          set.add('joe')
+          set.batch do |s|
+            s.add('john')
+            s.add('smith')
+            s.remove('joe')
+          end
+
+          expect(set.value).to eq(Set.new(['john', 'smith']))
+        end
+
+        it 'should store data scoped to the type' do
+          set.add('john')
+          expect(client.get_object(bucket, 'users', :type => 'sets')).not_to be_nil
+        end
+
+        it 'should set the content type on the object' do
+          set.add('john')
+          object = client.get_object(bucket, 'users', :type => 'sets')
+          expect(object.content_type).to eq('application/riak_set')
+        end
+      end
+
+      describe 'map' do
+        let(:map) do
+          Riak::Crdt::Map.new(bucket, 'user')
+        end
+
+        if RUBY_VERSION >= '2.1.0'
+          it 'should be an empty set by default' do
+            expect(map.value).to eq({'counters' => {}, 'flags' => {}, 'maps' => {}, 'registers' => {}, 'sets' => {}})
+          end
+        end
+
+        it 'should set the content type on the object' do
+          map.counters['points'].increment
+
+          object = client.get_object(bucket, 'user', :type => 'maps')
+          expect(object.content_type).to eq('application/riak_map')
+        end
+
+        describe 'set' do
+          it 'should be an empty set by default' do
+            expect(map.sets['colors'].value).to eq(Set.new)
+          end
+
+          it 'should track changes' do
+            map.sets['colors'].add('red')
+            map.sets['colors'].add('blue')
+            expect(map.sets['colors'].value).to eq(Set.new(['red', 'blue']))
+          end
+
+          it 'should allow deletion' do
+            map.sets['colors'].add('red')
+            map.sets.delete('colors')
+            expect(map.sets['colors'].value).to eq(Set.new)
+          end
+        end
+
+        describe 'counter' do
+          it 'should be 0 by default' do
+            expect(map.counters['points'].value).to eq(0)
+          end
+
+          it 'should track changes' do
+            map.counters['points'].increment
+            map.counters['points'].increment
+            expect(map.counters['points'].value).to eq(2)
+          end
+
+          it 'should allow deletion' do
+            map.counters['points'].increment
+            map.counters.delete('points')
+            expect(map.counters['points'].value).to eq(0)
+          end
+        end
+        
+        describe 'flag' do
+          it 'should be falsey by default' do
+            expect(map.flags['enabled']).to be_falsey
+          end
+
+          it 'should track changes' do
+            map.flags['enabled'] = true
+            expect(map.flags['enabled']).to eq(true)
+
+            map.flags['enabled'] = false
+            expect(map.flags['enabled']).to eq(false)
+          end
+
+          it 'should allow deletion' do
+            map.flags['enabled'] = true
+            map.flags.delete('enabled')
+            expect(map.flags['enabled']).to be_falsey
+          end
+        end
+        
+        describe 'register' do
+          it 'should be nil by default' do
+            expect(map.registers['name']).to be_nil
+          end
+
+          it 'should track changes' do
+            map.registers['name'] = 'John'
+            expect(map.registers['name']).to eq('John')
+
+            map.registers['name'] = 'Johnny'
+            expect(map.registers['name']).to eq('Johnny')
+          end
+
+          it 'should allow deletion' do
+            map.registers['name'] = 'John'
+            map.registers.delete('name')
+            expect(map.registers['name']).to be_nil
+          end
+        end
+        
+        describe 'sub-map' do
+          it 'should be empty by default' do
+            expect(map.maps['parent'].value).to eq({'counters' => {}, 'flags' => {}, 'maps' => {}, 'registers' => {}, 'sets' => {}})
+          end
+
+          it 'should track changes' do
+            map.maps['parent'].sets['colors'].add('red')
+            map.maps['parent'].counters['points'].increment
+            map.maps['parent'].flags['enabled'] = true
+            map.maps['parent'].registers['name'] = 'John'
+
+            expect(map.maps['parent'].sets['colors'].value).to eq(Set.new(['red']))
+            expect(map.maps['parent'].counters['points'].value).to eq(1)
+            expect(map.maps['parent'].flags['enabled']).to eq(true)
+            expect(map.maps['parent'].registers['name']).to eq('John')
+          end
+
+          it 'should not track changes in root' do
+            map.maps['parent'].sets['colors'].add('red')
+
+            expect(map.sets['colors'].value).to eq(Set.new)
+          end
+
+          it 'should allow deletion' do
+            map.maps['parent'].counters['points'].increment
+            map.maps.delete('parent')
+            expect(map.maps['parent'].counters['points'].value).to eq(0)
+          end
+        end
+
+        it 'should process batches' do
+          map.batch do |m|
+            m.counters['points'].increment
+            m.sets['colors'].add('red')
+          end
+
+          expect(map.counters['points'].value).to eq(1)
+          expect(map.sets['colors'].value).to eq(Set.new(['red']))
+        end
       end
     end
   end
