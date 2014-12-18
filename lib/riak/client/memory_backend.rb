@@ -174,7 +174,7 @@ module Riak
 
       # Reloads the data in the given object.
       def reload_object(robject, options = {})
-        result = bucket_data(bucket, options[:type])[:keys][key]
+        result = bucket_data(robject.bucket, options[:type])[:keys][robject.key]
         raise ProtobuffsFailedRequest.new(:not_found, t('not_found')) unless result
 
         load_object(robject, result)
@@ -258,6 +258,11 @@ module Riak
         bucket_type_props = bucket_type_data(bucket_type)[:props]
         bucket_type_props.merge!(props)
         bucket_type_props
+      end
+
+      # Resets the given bucket type's properties back to its factory defaults.
+      def clear_bucket_type_props(bucket_type)
+        bucket_type_data(bucket_type)[:props] = {}
       end
 
       # Lists all of the keys stored in the given bucket.  If a block is given,
