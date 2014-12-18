@@ -52,7 +52,14 @@ XML
 
   before(:each) do
     @old_verbose, $VERBOSE = $VERBOSE, nil
-    bucket.keys.each {|key| bucket.delete(key)}
+    [nil, 'realtype', 'other'].each do |bucket_type|
+      subject.reset_bucket_props(bucket, :type => bucket_type)
+      subject.reset_bucket_type_props(bucket_type)
+
+      bucket.keys(:type => bucket_type).each do |key|
+        bucket.delete(key, :type => bucket_type)
+      end
+    end
   end
 
   after(:each) do
@@ -88,7 +95,7 @@ XML
     end
   end
   
-  describe 'get_object' do
+  describe 'fetch_object' do
     it 'should raise an error if not existent' do
       expect { client.get_object('fakeriak', 'fakekey') }.to raise_error(Riak::ProtobuffsFailedRequest)
     end
@@ -104,6 +111,23 @@ XML
     end
   end
   
+  describe 'reload_object' do
+    it 'should raise an error if not existent' do
+      object = Riak::RObject.new(bucket, 'fakekey')
+      expect { client.reload_object(object) }.to raise_error(Riak::ProtobuffsFailedRequest)
+    end
+
+    it 'should get the value if exists' do
+      object = bucket.get_or_new('realkey')
+      object.raw_data = 'Hello world'
+      object.content_type = 'text/html'
+      object.store
+
+      object = Riak::RObject.new(bucket, 'realkey')
+      expect(client.reload_object(object)).to eq(object)
+    end
+  end
+
   describe 'store_object' do
     it 'build the object' do
       object = bucket.get_or_new('realkey')
@@ -241,6 +265,73 @@ eos
     end
   end
   
+  describe 'get_index' do
+    before(:each) do
+      object1 = bucket.get_or_new('realkey1')
+      object1.raw_data = 'test1'
+      object1.indexes['index_int'] << 20
+      object1.indexes['index_bin'] << '20'
+      object1.store
+
+      object2 = bucket.get_or_new('realkey2')
+      object2.raw_data = 'test2'
+      object2.indexes['index_int'] << 22
+      object2.indexes['index_bin'] << '22'
+      object2.store
+    end
+
+    context 'single index' do
+      it 'returns all matching items' do
+        expect(client.get_index(bucket, 'index_int', 20)).to eq(['realkey1'])
+      end
+
+      it 'should not include any items when nothing matches' do
+        expect(client.get_index(bucket, 'index_int', 18)).to eq([])
+      end
+    end
+
+    context 'index range' do
+      it 'should not include items outside of range' do
+        expect(client.get_index(bucket, 'index_int', 20..21)).to eq(['realkey1'])
+      end
+
+      it 'should include items within range' do
+        expect(client.get_index(bucket, 'index_int', 20..22)).to eq(['realkey1', 'realkey2'])
+      end
+
+      it 'should not include any items when nothing matches' do
+        expect(client.get_index(bucket, 'index_int', 18..19)).to eq([])
+      end
+    end
+
+    context 'with returned terms' do
+      it 'should track which keys matched which terms' do
+        index = client.get_index(bucket, 'index_int', 20..22, :return_terms => true)
+        expect(index.with_terms).to eq({20 => ['realkey1'], 22 => ['realkey2']})
+      end
+    end
+
+    context 'with limit' do
+      it 'should only return up to the limit' do
+        expect(client.get_index(bucket, 'index_int', 20..22, :max_results => 1)).to eq(['realkey1'])
+      end
+
+      it 'should return all keys if limit is large enough' do
+        expect(client.get_index(bucket, 'index_int', 20..22, :max_results => 5)).to eq(['realkey1', 'realkey2'])
+      end
+    end
+
+    context 'with continuation' do
+      it 'should include only keys after the continuation' do
+        expect(client.get_index(bucket, 'index_int', 20..22, :max_results => 1, :continuation => '1')).to eq(['realkey2'])
+      end
+
+      it 'should be empty if there are no more matching keys after the continuation' do
+        expect(client.get_index(bucket, 'index_int', 20..22, :max_results => 1, :continuation => '2')).to eq([])
+      end
+    end
+  end
+
   describe 'teardown' do
     it 'should no-op' do
       result = subject.teardown
@@ -264,7 +355,7 @@ eos
   end
 
   if RIAK_CLIENT_VERSION >= '2.0.0' && RIAK_SERVER_VERSION >= '2.0'
-    describe 'get_index' do
+    describe 'get_search_index' do
       it 'should fail when index is nonexistent' do
         expect { client.get_search_index('invalid') }.to raise_error(Riak::ProtobuffsErrorResponse)
       end
@@ -325,12 +416,12 @@ eos
 
     describe 'get_bucket_type_props' do
       it 'should be empty by default' do
-        expect(subject.get_bucket_type_props('sets')).to eq({})
+        expect(subject.get_bucket_type_props('foo')).to eq({})
       end
 
       it 'should get previously set props' do
-        subject.set_bucket_type_props('sets', 'datatype' => 'set')
-        expect(subject.get_bucket_type_props('sets')).to eq({'datatype' => 'set'})
+        subject.set_bucket_type_props('sets', 'datatype' => 'counter')
+        expect(subject.get_bucket_type_props('sets')).to eq({'datatype' => 'counter'})
       end
     end
 
@@ -355,6 +446,89 @@ eos
     describe 'crdt_operator' do
       it 'should build an operator instance' do
         expect(subject.crdt_operator).to be_instance_of(Riak::Client::MemoryBackend::CrdtOperator)
+      end
+    end
+
+    describe 'bucket types' do
+      let!(:object) do
+        object = bucket.get_or_new('realkey')
+        object.raw_data = 'Hello world'
+        object.content_type = 'text/html'
+        object.store(:type => 'realtype')
+      end
+
+      it 'should scope fetch_object' do
+        expect(client.get_object('fakeriak', 'realkey', :type => 'realtype')).not_to be_nil
+        expect { client.get_object('fakeriak', 'realkey', :type => 'other') }.to raise_error(Riak::ProtobuffsFailedRequest)
+      end
+
+      it 'should scope reload_object' do
+        object = Riak::RObject.new(bucket, 'realkey')
+        expect(client.reload_object(object, :type => 'realtype')).to eq(object)
+        expect { client.reload_object(object, :type => 'other') }.to raise_error(Riak::ProtobuffsFailedRequest)
+      end
+
+      it 'should scope store_object' do
+        object = bucket.get_or_new('realkey')
+        object.raw_data = 'Hello world other'
+        object.content_type = 'text/html'
+        object.store(:type => 'other')
+
+        expect(client.get_object('fakeriak', 'realkey', :type => 'realtype').raw_data).to eq('Hello world')
+        expect(client.get_object('fakeriak', 'realkey', :type => 'other').raw_data).to eq('Hello world other')
+      end
+
+      it 'should scope delete_object' do
+        client.delete_object('fakeriak', 'realkey', :type => 'other')
+        expect { client.get_object('fakeriak', 'realkey', :type => 'realtype') }.not_to raise_error
+        expect(client.delete_object('fakeriak', 'realkey', :type => 'realtype')).to eq(true)
+        expect { client.get_object('fakeriak', 'realkey', :type => 'realtype') }.to raise_error
+      end
+
+      it 'should scope get_counter' do
+        bucket.allow_mult = true
+        bucket.counter('users').increment(1, :type => 'realtype')
+        expect(bucket.counter('users').value(:type => 'other')).to eq(0)
+        expect(bucket.counter('users').value(:type => 'realtype')).to eq(1)
+      end
+
+      it 'should scope get_bucket_props' do
+        client.set_bucket_props(bucket, {:allow_mult => true}, 'realtype')
+        expect(client.get_bucket_props(bucket, :type => 'other')['allow_mult']).to be_nil
+        expect(client.get_bucket_props(bucket, :type => 'realtype')['allow_mult']).to eq(true)
+      end
+
+      it 'should scope set_bucket_props' do
+        client.set_bucket_props(bucket, {:allow_mult => false}, 'realtype')
+        client.set_bucket_props(bucket, {:allow_mult => true}, 'other')
+        expect(client.get_bucket_props(bucket, :type => 'realtype')['allow_mult']).to eq(false)
+        expect(client.get_bucket_props(bucket, :type => 'other')['allow_mult']).to eq(true)
+      end
+
+      it 'should scope clear_bucket_props' do
+        client.set_bucket_props(bucket, {:allow_mult => false}, 'realtype')
+        client.set_bucket_props(bucket, {:allow_mult => true}, 'other')
+        subject.clear_bucket_props(bucket, :type => 'other')
+        expect(client.get_bucket_props(bucket, :type => 'realtype')['allow_mult']).to eq(false)
+        expect(client.get_bucket_props(bucket, :type => 'other')['allow_mult']).to be_nil
+      end
+
+      it 'should scope list_keys' do
+        expect(client.list_keys(bucket)).to eq([])
+        expect(client.list_keys(bucket, :type => 'realtype')).to eq(['realkey'])
+      end
+
+      it 'should scope list_buckets' do
+        expect(client.list_buckets).to eq([])
+        expect(client.list_buckets(:type => 'realtype')).to eq([bucket])
+      end
+
+      it 'should scope get_index' do
+        object.indexes['index_int'] << 20
+        object.store(:type => 'realtype')
+
+        expect(client.get_index(bucket, 'index_int', 20)).to eq([])
+        expect(client.get_index(bucket, 'index_int', 20, :type => 'realtype')).to eq(['realkey'])
       end
     end
   end

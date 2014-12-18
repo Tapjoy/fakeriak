@@ -238,8 +238,8 @@ module Riak
       end
 
       # Resets the given bucket's properties back to its factory defaults.
-      def clear_bucket_props(bucket)
-        bucket_data(bucket)[:props] = DEFAULT_BUCKET_PROPS.dup
+      def clear_bucket_props(bucket, options = {})
+        bucket_data(bucket, options[:type])[:props] = DEFAULT_BUCKET_PROPS.dup
       end
       alias_method :reset_bucket_props, :clear_bucket_props
 
@@ -261,7 +261,7 @@ module Riak
       end
 
       # Resets the given bucket type's properties back to its factory defaults.
-      def clear_bucket_type_props(bucket_type)
+      def reset_bucket_type_props(bucket_type)
         bucket_type_data(bucket_type)[:props] = {}
       end
 
@@ -376,15 +376,16 @@ module Riak
                   result.with_terms[value] ||= []
                   result.with_terms[value] << key
                 end
-
-                if options[:max_results] && result.length == options[:max_results]
-                  result.continuation = (result.length + 1).to_s
-                  break
-                end
               else
                 skipped += 1
+                break
               end
             end
+          end
+
+          if options[:max_results] && result.length == options[:max_results]
+            result.continuation = (result.length + 1).to_s
+            break
           end
         end
 
