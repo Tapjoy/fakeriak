@@ -25,13 +25,14 @@ module Riak
         # Processes the given operations
         def operate(bucket, key, bucket_type, operation, options = {})
           bucket = backend.client.bucket(bucket) unless bucket.is_a?(Bucket)
+          operations = Array(operation)
 
           # Get the current data for this key
           data = backend.crdt_loader.load(bucket, key, bucket_type)
-          datatype = Array(operation)[0].type
+          datatype = operations[0].type
 
           # Process each operation on the data
-          Array(operation).each do |operation|
+          operations.each do |operation|
             data = merge(data, datatype, operation.value)
           end
 
