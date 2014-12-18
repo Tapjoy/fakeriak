@@ -322,6 +322,41 @@ eos
         expect(result).to eq(true)
       end
     end
+
+    describe 'get_bucket_type_props' do
+      it 'should be empty by default' do
+        expect(subject.get_bucket_type_props('sets')).to eq({})
+      end
+
+      it 'should get previously set props' do
+        subject.set_bucket_type_props('sets', 'datatype' => 'set')
+        expect(subject.get_bucket_type_props('sets')).to eq({'datatype' => 'set'})
+      end
+    end
+
+    describe 'set_bucket_type_props' do
+      it 'should return the persisted props' do
+        result = subject.set_bucket_type_props('sets', 'datatype' => 'set')
+        expect(result).to eq('datatype' => 'set')
+      end
+
+      it 'should convert symbols to strings' do
+        result = subject.set_bucket_type_props('sets', :datatype => 'set')
+        expect(result).to eq('datatype' => 'set')
+      end
+    end
+
+    describe 'crdt_loader' do
+      it 'should build a loader instance' do
+        expect(subject.crdt_loader).to be_instance_of(Riak::Client::MemoryBackend::CrdtLoader)
+      end
+    end
+
+    describe 'crdt_operator' do
+      it 'should build an operator instance' do
+        expect(subject.crdt_operator).to be_instance_of(Riak::Client::MemoryBackend::CrdtOperator)
+      end
+    end
   end
 
   unless ENV['LIVE']
