@@ -9,6 +9,9 @@ rescue LoadError
   require 'riak/failed_request'
 end
 
+require 'riak/client/memory_backend/crdt_loader'
+require 'riak/client/memory_backend/crdt_operator'
+
 require 'base64'
 require 'digest/md5'
 require 'multi_json'
@@ -124,7 +127,7 @@ module Riak
 
         # Initialize the data on the given host
         @data = self.class.server_data[node.host] || begin
-          data = {:buckets => {}, :search_indexes => {}, :search_schemas => {}}
+          data = {:bucket_types => {}, :search_indexes => {}, :search_schemas => {}}
           client.nodes.each do |node|
             self.class.server_data[node.host] = data
           end
@@ -163,7 +166,7 @@ module Riak
       # Gets the data stored in the given bucket / key.  This will raise an
       # exception if the key does not exist
       def fetch_object(bucket, key, options = {})
-        result = data(bucket)[:keys][key]
+        result = bucket_data(bucket, options[:type])[:keys][key]
         raise ProtobuffsFailedRequest.new(:not_found, t('not_found')) unless result
         
         load_object(RObject.new(bucket, key), result)
@@ -171,7 +174,7 @@ module Riak
 
       # Reloads the data in the given object.
       def reload_object(robject, options = {})
-        result = data(bucket)[:keys][key]
+        result = bucket_data(bucket, options[:type])[:keys][key]
         raise ProtobuffsFailedRequest.new(:not_found, t('not_found')) unless result
 
         load_object(robject, result)
@@ -181,7 +184,7 @@ module Riak
       def store_object(robject, options = {})
         raw_data = begin; robject.raw_data.dup; rescue TypeError; robject.raw_data; end
 
-        data(robject.bucket)[:keys][robject.key] = {
+        bucket_data(robject.bucket, options[:type])[:keys][robject.key] = {
           :value => raw_data,
           :content_type => robject.content_type.dup,
           :links => robject.links.dup,
@@ -195,14 +198,14 @@ module Riak
 
       # Removes the given key from the server
       def delete_object(bucket, key, options = {})
-        data(bucket)[:keys].delete(key)
+        bucket_data(bucket, options[:type])[:keys].delete(key)
         true
       end
 
       # Looks up the numeric value at the given key.  If it's not defined,
       # then this will return 0.
       def get_counter(bucket, key, options = {})
-        result = data(bucket)[:keys][key]
+        result = bucket_data(bucket, options[:type])[:keys][key]
         result ? result[:value] : 0
       end
 
@@ -221,27 +224,46 @@ module Riak
 
       # Gets the properties stored in the given bucket.  See Riak::Bucket#props.
       def get_bucket_props(bucket, options = {})
-        data(bucket)[:props]
+        bucket_data(bucket, options[:type])[:props]
       end
 
       # Updates the given bucket's properties.  See Riak::Bucket#props for the
       # list of properties available.
-      def set_bucket_props(bucket, props, options = {})
-        bucket_props = data(bucket)[:props]
+      def set_bucket_props(bucket, props, type = nil)
+        stringify_keys!(props)
+
+        bucket_props = bucket_data(bucket, type)[:props]
         bucket_props.merge!(props)
         bucket_props
       end
 
       # Resets the given bucket's properties back to its factory defaults.
       def clear_bucket_props(bucket)
-        data(bucket)[:props] = DEFAULT_BUCKET_PROPS.dup
+        bucket_data(bucket)[:props] = DEFAULT_BUCKET_PROPS.dup
       end
       alias_method :reset_bucket_props, :clear_bucket_props
+
+      # Gets the properties stored in the given bucket type.  See Riak::BucketType#props.
+      def get_bucket_type_props(bucket_type)
+        bucket_type = bucket_type.name if bucket_type.respond_to?(:name)
+        bucket_type_data(bucket_type)[:props]
+      end
+
+      # Updates the given bucket type's properties.  See Riak::BucketType#props
+      # for the list of properties available.
+      def set_bucket_type_props(bucket_type, props)
+        stringify_keys!(props)
+
+        bucket_type = bucket_type.name if bucket_type.respond_to?(:name)
+        bucket_type_props = bucket_type_data(bucket_type)[:props]
+        bucket_type_props.merge!(props)
+        bucket_type_props
+      end
 
       # Lists all of the keys stored in the given bucket.  If a block is given,
       # the keys will be passed to that block.
       def list_keys(bucket, options = {})
-        keys = data(bucket)[:keys].keys
+        keys = bucket_data(bucket, options[:type])[:keys].keys
 
         if block_given?
           yield keys unless keys.empty?
@@ -254,8 +276,8 @@ module Riak
       # Lists all of the buckets stored on the server.  If a block is given,
       # the buckets will be pased to that block.
       def list_buckets(options = {})
-        buckets = @data[:buckets].keys
-        buckets.select! {|bucket| list_keys(bucket).any?}
+        buckets = bucket_type_data(options[:type])[:buckets].keys
+        buckets.select! {|bucket| list_keys(bucket, options).any?}
 
         if block_given?
           yield buckets unless buckets.empty?
@@ -327,8 +349,8 @@ module Riak
         continuation = (options[:continuation] || 0).to_i
         skipped = 0
 
-        list_keys(bucket).each do |key|
-          object = fetch_object(bucket, key)
+        list_keys(bucket, options).each do |key|
+          object = fetch_object(bucket, key, options)
           object.indexes[index].each do |value|
             # Determine if the object is indexed by one of the values in the query
             found_match =
@@ -407,6 +429,16 @@ module Riak
         BeefcakeProtobuffsBackend::RpbYokozunaSchema.new(search_schema)
       end
 
+      # Returns an CRDT loader for deserializing CRDTs
+      def crdt_loader
+        CrdtLoader.new(self)
+      end
+
+      # Returns a new CRDT operator for processing CRDT operations
+      def crdt_operator
+        CrdtOperator.new(self)
+      end
+
       # Cleans up anything left behind by backend connections
       def teardown
         # No-op
@@ -447,10 +479,15 @@ module Riak
         server_info[:server_version]
       end
 
-      # Grabs the data currently be stored in the given bucket
-      def data(bucket)
+      # Grabs the data currently stored for the given bucket type
+      def bucket_type_data(type)
+        @data[:bucket_types][type] ||= {:props => {}, :buckets => {}}
+      end
+
+      # Grabs the data currently stored in the given bucket
+      def bucket_data(bucket, type = nil)
         bucket = bucket.name if Bucket === bucket
-        @data[:buckets][bucket] ||= {:props => DEFAULT_BUCKET_PROPS.dup, :keys => {}}
+        bucket_type_data(type)[:buckets][bucket] ||= {:props => DEFAULT_BUCKET_PROPS.dup, :keys => {}}
       end
 
       # Loads the given stored data into an RObject
@@ -502,6 +539,11 @@ module Riak
         else
           raise NotImplementedError, "Map-Reduce functions implemented in #{phase.language} are not supported"
         end
+      end
+
+      # Converts all of the keys in the given hash to strings
+      def stringify_keys!(hash)
+        hash.keys.each {|key| hash[key.to_s] = hash.delete(key)}
       end
     end
 
