@@ -1,7 +1,8 @@
 # fakeriak
 
-An in-memory hash implementation of Riak.  This is designed to be used in specs
-to remove the external dependency of a running Riak server.
+An in-memory driver implementation of the Riak API.  This is designed to be
+used in test environments to remove the external dependency of a running Riak
+server.
 
 ## Features
 
