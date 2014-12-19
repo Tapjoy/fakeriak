@@ -5,16 +5,26 @@ to remove the external dependency of a running Riak server.
 
 ## Features
 
+The following Riak features are supported:
+* Server Info
+* Basic stats
+* Object lookups
+* Pre-2.0 counters
+* Bucket / Bucket Type props
+* List keys / buckets
+* Map/Reduce with Javascript
+* Secondary indexes
+* Search indexes / schemas
+* CRDTs
+
 The following Riak features are currently not implemented:
-* Solr search queries
-* Map/Reduce with Erlang (Javascript is supported)
+* Search queries with Solr
+* Map/Reduce with Erlang
 
 The following Riak features are deprecated in Riak 1.x, removed in Riak 2.x,
 and therefore will not be supported:
 * Luwak file storage
 * Link walking
-
-Everything else is fully supported.
 
 ## Usage
 
