@@ -18,28 +18,30 @@ module Riak
 
         def initialize(backend)
           @backend = backend
-
-          # Use a generated context since they're meaningless in a memory backend
-          @context = SecureRandom.uuid
         end
 
         # Returns the deserialized CRDT for the given key
         def load(bucket, key, bucket_type, options = {})
           begin
             robject = backend.fetch_object(bucket, key, :type => bucket_type)
-            Marshal.load(robject.raw_data)
+            result = Marshal.load(robject.raw_data)
           rescue Riak::ProtobuffsFailedRequest => ex
             # Key doesn't exist in the data store: provide a default initial
             # value based on the data type associated with the provided
             # bucket type
-            datatype = backend.get_bucket_type_props(bucket_type)['datatype'].to_sym
+            datatype = backend.get_bucket_type_props(bucket_type)['datatype']
 
-            if DEFAULTS[datatype]
-              DEFAULTS[datatype].call
+            if datatype && DEFAULTS[datatype.to_sym]
+              result = DEFAULTS[datatype.to_sym].call
             else
-              raise Riak::ProtobuffsErrorResponse, "Unsupported CRDT data type: #{datatype}"
+              raise ProtobuffsErrorResponse.new(BeefcakeProtobuffsBackend::RpbErrorResp.new(:errcode => 0, :errmsg => "Unsupported CRDT data type: #{datatype.inspect}"))
             end
           end
+
+          # Use a generated context since they're meaningless in a memory backend
+          @context = SecureRandom.uuid
+
+          result
         end
 
         # Gets the class that is able to interpret and load the given value into

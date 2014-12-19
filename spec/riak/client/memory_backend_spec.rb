@@ -3,9 +3,7 @@ require 'riak/client/memory_backend'
 require 'riak/version'
 
 def build_client
-  if ENV['LIVE']
-    Riak::Client.new
-  elsif RIAK_CLIENT_VERSION < '2.0.0'
+  if RIAK_CLIENT_VERSION < '2.0.0'
     Riak::Client.new(:protobuffs_backend => :Memory, :http_backend => :Memory)
   else
     Riak::Client.new(:protobuffs_backend => :Memory)
@@ -52,7 +50,7 @@ XML
 
   before(:each) do
     @old_verbose, $VERBOSE = $VERBOSE, nil
-    [nil, 'realtype', 'other', 'counters', 'sets', 'maps'].each do |bucket_type|
+    [nil, 'counters', 'sets', 'maps'].each do |bucket_type|
       subject.reset_bucket_props(bucket, :type => bucket_type)
       subject.reset_bucket_type_props(bucket_type)
 
@@ -454,81 +452,81 @@ eos
         object = bucket.get_or_new('realkey')
         object.raw_data = 'Hello world'
         object.content_type = 'text/html'
-        object.store(:type => 'realtype')
+        object.store(:type => 'counters')
       end
 
       it 'should scope fetch_object' do
-        expect(client.get_object('fakeriak', 'realkey', :type => 'realtype')).not_to be_nil
-        expect { client.get_object('fakeriak', 'realkey', :type => 'other') }.to raise_error(Riak::ProtobuffsFailedRequest)
+        expect(client.get_object('fakeriak', 'realkey', :type => 'counters')).not_to be_nil
+        expect { client.get_object('fakeriak', 'realkey', :type => 'sets') }.to raise_error(Riak::ProtobuffsFailedRequest)
       end
 
       it 'should scope reload_object' do
         object = Riak::RObject.new(bucket, 'realkey')
-        expect(client.reload_object(object, :type => 'realtype')).to eq(object)
-        expect { client.reload_object(object, :type => 'other') }.to raise_error(Riak::ProtobuffsFailedRequest)
+        expect(client.reload_object(object, :type => 'counters')).to eq(object)
+        expect { client.reload_object(object, :type => 'sets') }.to raise_error(Riak::ProtobuffsFailedRequest)
       end
 
       it 'should scope store_object' do
         object = bucket.get_or_new('realkey')
         object.raw_data = 'Hello world other'
         object.content_type = 'text/html'
-        object.store(:type => 'other')
+        object.store(:type => 'sets')
 
-        expect(client.get_object('fakeriak', 'realkey', :type => 'realtype').raw_data).to eq('Hello world')
-        expect(client.get_object('fakeriak', 'realkey', :type => 'other').raw_data).to eq('Hello world other')
+        expect(client.get_object('fakeriak', 'realkey', :type => 'counters').raw_data).to eq('Hello world')
+        expect(client.get_object('fakeriak', 'realkey', :type => 'sets').raw_data).to eq('Hello world other')
       end
 
       it 'should scope delete_object' do
-        client.delete_object('fakeriak', 'realkey', :type => 'other')
-        expect { client.get_object('fakeriak', 'realkey', :type => 'realtype') }.not_to raise_error
-        expect(client.delete_object('fakeriak', 'realkey', :type => 'realtype')).to eq(true)
-        expect { client.get_object('fakeriak', 'realkey', :type => 'realtype') }.to raise_error
+        client.delete_object('fakeriak', 'realkey', :type => 'sets')
+        expect { client.get_object('fakeriak', 'realkey', :type => 'counters') }.not_to raise_error
+        expect(client.delete_object('fakeriak', 'realkey', :type => 'counters')).to eq(true)
+        expect { client.get_object('fakeriak', 'realkey', :type => 'counters') }.to raise_error
       end
 
       it 'should scope get_counter' do
         bucket.allow_mult = true
-        bucket.counter('users').increment(1, :type => 'realtype')
-        expect(bucket.counter('users').value(:type => 'other')).to eq(0)
-        expect(bucket.counter('users').value(:type => 'realtype')).to eq(1)
+        bucket.counter('users').increment(1, :type => 'counters')
+        expect(bucket.counter('users').value(:type => 'sets')).to eq(0)
+        expect(bucket.counter('users').value(:type => 'counters')).to eq(1)
       end
 
       it 'should scope get_bucket_props' do
-        client.set_bucket_props(bucket, {:allow_mult => true}, 'realtype')
-        expect(client.get_bucket_props(bucket, :type => 'other')['allow_mult']).to be_nil
-        expect(client.get_bucket_props(bucket, :type => 'realtype')['allow_mult']).to eq(true)
+        client.set_bucket_props(bucket, {:allow_mult => true}, 'counters')
+        expect(client.get_bucket_props(bucket, :type => 'sets')['allow_mult']).to be_nil
+        expect(client.get_bucket_props(bucket, :type => 'counters')['allow_mult']).to eq(true)
       end
 
       it 'should scope set_bucket_props' do
-        client.set_bucket_props(bucket, {:allow_mult => false}, 'realtype')
-        client.set_bucket_props(bucket, {:allow_mult => true}, 'other')
-        expect(client.get_bucket_props(bucket, :type => 'realtype')['allow_mult']).to eq(false)
-        expect(client.get_bucket_props(bucket, :type => 'other')['allow_mult']).to eq(true)
+        client.set_bucket_props(bucket, {:allow_mult => false}, 'counters')
+        client.set_bucket_props(bucket, {:allow_mult => true}, 'sets')
+        expect(client.get_bucket_props(bucket, :type => 'counters')['allow_mult']).to eq(false)
+        expect(client.get_bucket_props(bucket, :type => 'sets')['allow_mult']).to eq(true)
       end
 
       it 'should scope clear_bucket_props' do
-        client.set_bucket_props(bucket, {:allow_mult => false}, 'realtype')
-        client.set_bucket_props(bucket, {:allow_mult => true}, 'other')
-        subject.clear_bucket_props(bucket, :type => 'other')
-        expect(client.get_bucket_props(bucket, :type => 'realtype')['allow_mult']).to eq(false)
-        expect(client.get_bucket_props(bucket, :type => 'other')['allow_mult']).to be_nil
+        client.set_bucket_props(bucket, {:allow_mult => false}, 'counters')
+        client.set_bucket_props(bucket, {:allow_mult => true}, 'sets')
+        subject.clear_bucket_props(bucket, :type => 'sets')
+        expect(client.get_bucket_props(bucket, :type => 'counters')['allow_mult']).to eq(false)
+        expect(client.get_bucket_props(bucket, :type => 'sets')['allow_mult']).to be_nil
       end
 
       it 'should scope list_keys' do
         expect(client.list_keys(bucket)).to eq([])
-        expect(client.list_keys(bucket, :type => 'realtype')).to eq(['realkey'])
+        expect(client.list_keys(bucket, :type => 'counters')).to eq(['realkey'])
       end
 
       it 'should scope list_buckets' do
         expect(client.list_buckets).to eq([])
-        expect(client.list_buckets(:type => 'realtype')).to eq([bucket])
+        expect(client.list_buckets(:type => 'counters')).to eq([bucket])
       end
 
       it 'should scope get_index' do
         object.indexes['index_int'] << 20
-        object.store(:type => 'realtype')
+        object.store(:type => 'counters')
 
         expect(client.get_index(bucket, 'index_int', 20)).to eq([])
-        expect(client.get_index(bucket, 'index_int', 20, :type => 'realtype')).to eq(['realkey'])
+        expect(client.get_index(bucket, 'index_int', 20, :type => 'counters')).to eq(['realkey'])
       end
     end
 
@@ -610,6 +608,7 @@ eos
         it 'should track changes' do
           set.add('john')
           set.add('smith')
+          set.reload
           set.remove('smith')
 
           expect(set.value).to eq(Set.new(['john']))
@@ -617,6 +616,7 @@ eos
 
         it 'should process batches' do
           set.add('joe')
+          set.reload
           set.batch do |s|
             s.add('john')
             s.add('smith')
@@ -693,8 +693,10 @@ eos
         end
         
         describe 'flag' do
-          it 'should be falsey by default' do
-            expect(map.flags['enabled']).to be_falsey
+          if RIAK_CLIENT_VERSION > '2.1.0'
+            it 'should be falsey by default' do
+              expect(map.flags['enabled']).to be_falsey
+            end
           end
 
           it 'should track changes' do
@@ -705,10 +707,12 @@ eos
             expect(map.flags['enabled']).to eq(false)
           end
 
-          it 'should allow deletion' do
-            map.flags['enabled'] = true
-            map.flags.delete('enabled')
-            expect(map.flags['enabled']).to be_falsey
+          if RIAK_CLIENT_VERSION > '2.1.0'
+            it 'should allow deletion' do
+              map.flags['enabled'] = true
+              map.flags.delete('enabled')
+              expect(map.flags['enabled']).to be_falsey
+            end
           end
         end
         
@@ -777,41 +781,39 @@ eos
     end
   end
 
-  unless ENV['LIVE']
-    describe 'search' do
-      it 'should raise an error' do
-        expect { subject.search('test', 'a=1') }.to raise_error(NotImplementedError)
-      end
+  describe 'search' do
+    it 'should raise an error' do
+      expect { subject.search('test', 'a=1') }.to raise_error(NotImplementedError)
     end
-    
-    describe 'link_walk' do
-      it 'should raise an error' do
-        expect { subject.link_walk('test1', 'test2') }.to raise_error(NotImplementedError)
-      end
+  end
+  
+  describe 'link_walk' do
+    it 'should raise an error' do
+      expect { subject.link_walk('test1', 'test2') }.to raise_error(NotImplementedError)
     end
-    
-    describe 'get_file' do
-      it 'should raise an error' do
-        expect { subject.get_file('test') }.to raise_error(NotImplementedError)
-      end
+  end
+  
+  describe 'get_file' do
+    it 'should raise an error' do
+      expect { subject.get_file('test') }.to raise_error(NotImplementedError)
     end
-    
-    describe 'file_exists?' do
-      it 'should raise an error' do
-        expect { subject.file_exists?('test') }.to raise_error(NotImplementedError)
-      end
+  end
+  
+  describe 'file_exists?' do
+    it 'should raise an error' do
+      expect { subject.file_exists?('test') }.to raise_error(NotImplementedError)
     end
-    
-    describe 'delete_file' do
-      it 'should raise an error' do
-        expect { subject.delete_file('test') }.to raise_error(NotImplementedError)
-      end
+  end
+  
+  describe 'delete_file' do
+    it 'should raise an error' do
+      expect { subject.delete_file('test') }.to raise_error(NotImplementedError)
     end
-    
-    describe 'store_file' do
-      it 'should raise an error' do
-        expect { subject.store_file('test') }.to raise_error(NotImplementedError)
-      end
+  end
+  
+  describe 'store_file' do
+    it 'should raise an error' do
+      expect { subject.store_file('test') }.to raise_error(NotImplementedError)
     end
   end
 end

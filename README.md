@@ -85,12 +85,6 @@ bundle exec appraisal riak-2.0 rspec
 bundle exec appraisal riak-2.1 rspec
 ```
 
-To run the specs against a live version of Riak instead of the fake implementation:
-
-```
-LIVE=true bundle exec appraisal riak-2.1 rspec
-```
-
 ## Dependencies
 
 fakeriak has been tested and verified with with the following dependencies:
