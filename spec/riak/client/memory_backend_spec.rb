@@ -733,8 +733,10 @@ eos
         end
         
         describe 'sub-map' do
-          it 'should be empty by default' do
-            expect(map.maps['parent'].value).to eq({'counters' => {}, 'flags' => {}, 'maps' => {}, 'registers' => {}, 'sets' => {}})
+          if RUBY_VERSION >= '2.1.0'
+            it 'should be empty by default' do
+              expect(map.maps['parent'].value).to eq({'counters' => {}, 'flags' => {}, 'maps' => {}, 'registers' => {}, 'sets' => {}})
+            end
           end
 
           it 'should track changes' do
