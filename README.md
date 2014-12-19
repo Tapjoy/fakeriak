@@ -90,5 +90,5 @@ bundle exec appraisal riak-2.1 rspec
 fakeriak has been tested and verified with with the following dependencies:
 
 * Ruby: 1.9.3+
-* Riak Client: 1.4+
-* Riak Server: 1.4+
+* [Riak Ruby Client](https://github.com/basho/riak-ruby-client): 1.4+
+* [Riak Server](http://basho.com/riak/): 1.4+
